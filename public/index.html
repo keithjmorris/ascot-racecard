@@ -174,6 +174,111 @@
 
   .race-meta span b { color: var(--ink); font-weight: 600; }
 
+  .view-toggle {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.6rem 1.4rem;
+    background: var(--cream);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .view-toggle button {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+
+  .view-toggle button.active {
+    background: var(--green-deep);
+    color: var(--cream);
+    border-color: var(--green-deep);
+  }
+
+  .no-result {
+    padding: 2rem 1.4rem;
+    text-align: center;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  td.position {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    color: var(--paper);
+    background: var(--brass);
+    text-align: center;
+    width: 1.6rem;
+    border-radius: 3px;
+    padding: 0.3rem 0.4rem;
+  }
+
+  td.position.winner { background: var(--green-deep); }
+
+  td.sp {
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  td.horse .name {
+    cursor: pointer;
+    text-decoration: underline dotted var(--rule);
+  }
+  td.horse .name:hover { color: var(--green-deep); }
+
+  tr.history-row td {
+    background: var(--cream);
+    padding: 0;
+  }
+
+  .history-panel {
+    padding: 0.7rem 1rem;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.8rem;
+  }
+
+  .history-panel .loading,
+  .history-panel .empty {
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  table.history {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.2rem;
+  }
+
+  table.history th {
+    text-align: left;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 0.25rem 0.5rem;
+  }
+
+  table.history td {
+    padding: 0.3rem 0.5rem;
+    color: var(--ink);
+    border-top: 1px solid var(--rule);
+  }
+
+  table.history td.hist-pos {
+    font-weight: 700;
+    color: var(--green-deep);
+    width: 1.4rem;
+  }
+
   table.runners {
     width: 100%;
     border-collapse: collapse;
@@ -217,7 +322,12 @@
     text-align: center;
   }
 
-  td.horse .name { font-weight: 600; }
+  td.horse .name {
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline dotted var(--rule);
+  }
+  td.horse .name:hover { color: var(--green-deep); }
   td.horse .breeding {
     display: block;
     font-size: 0.78rem;
@@ -255,6 +365,50 @@
     nav.race-tabs button { padding: 0.55rem 0.8rem 0.45rem; }
     nav.race-tabs button .tab-label { display: none; }
   }
+
+  tr.history-row td {
+    background: var(--cream);
+    padding: 0;
+  }
+
+  .history-panel {
+    padding: 0.7rem 1rem;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.8rem;
+  }
+
+  .history-panel .loading,
+  .history-panel .empty {
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  table.history {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.2rem;
+  }
+
+  table.history th {
+    text-align: left;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding: 0.25rem 0.5rem;
+  }
+
+  table.history td {
+    padding: 0.3rem 0.5rem;
+    color: var(--ink);
+    border-top: 1px solid var(--rule);
+  }
+
+  table.history td.hist-pos {
+    font-weight: 700;
+    color: var(--green-deep);
+    width: 1.4rem;
+  }
 </style>
 </head>
 <body>
@@ -275,7 +429,11 @@
 
 <script>
 let allRaces = [];
+let resultsByRaceId = {};
 let activeIndex = 0;
+let activeView = "runners";
+let horseHistoryCache = {};
+let expandedHorseId = null;
 
 async function loadCard() {
   const statusEl = document.getElementById("status");
@@ -300,7 +458,10 @@ async function loadCard() {
     races.sort((a, b) => (a.off_dt || a.off_time).localeCompare(b.off_dt || b.off_time));
 
     allRaces = races;
+    resultsByRaceId = data.resultsByRaceId || {};
     activeIndex = 0;
+    activeView = "runners";
+    expandedHorseId = null;
 
     dateEl.textContent = `Ascot · ${races[0].date}`;
     statusEl.remove();
@@ -327,6 +488,8 @@ function renderTabs() {
   tabsEl.querySelectorAll("button").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeIndex = Number(btn.dataset.index);
+      activeView = "runners";
+      expandedHorseId = null;
       renderTabs();
       renderActiveRace();
     });
@@ -336,6 +499,21 @@ function renderTabs() {
 function renderActiveRace() {
   const racesEl = document.getElementById("races");
   racesEl.innerHTML = renderRace(allRaces[activeIndex]);
+
+  racesEl.querySelectorAll(".view-toggle button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeView = btn.dataset.view;
+      expandedHorseId = null;
+      renderActiveRace();
+    });
+  });
+
+  racesEl.querySelectorAll("td.horse .name").forEach((nameEl) => {
+    nameEl.addEventListener("click", () => {
+      const horseId = nameEl.dataset.horseId;
+      if (horseId) toggleHorseHistory(horseId);
+    });
+  });
 }
 
 function shortRaceName(name) {
@@ -344,9 +522,7 @@ function shortRaceName(name) {
 }
 
 function renderRace(race) {
-  const runners = (race.runners || [])
-    .slice()
-    .sort((a, b) => Number(a.number || 0) - Number(b.number || 0));
+  const result = resultsByRaceId[race.race_id];
 
   return `
     <section class="race-card">
@@ -359,34 +535,94 @@ function renderRace(race) {
         <span>${escapeHtml(race.distance_f || "")}f</span>
         <span>${escapeHtml(race.going || "")}</span>
         <span>${escapeHtml(race.age_band || "")}</span>
-        <span>${escapeHtml(race.field_size || runners.length)} runners</span>
+        <span>${escapeHtml(race.field_size || (race.runners || []).length)} runners</span>
         <span><b>${escapeHtml(race.prize || "")}</b></span>
       </div>
-      <table class="runners">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Draw</th>
-            <th>Horse</th>
-            <th>Form</th>
-            <th>Jockey / Trainer</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${runners.map(renderRunner).join("")}
-        </tbody>
-      </table>
+      <div class="view-toggle">
+        <button class="${activeView === "runners" ? "active" : ""}" data-view="runners">Runners</button>
+        <button class="${activeView === "result" ? "active" : ""}" data-view="result">Result</button>
+      </div>
+      ${activeView === "result" ? renderResult(result) : renderRunnersTable(race)}
     </section>
   `;
 }
 
+function renderRunnersTable(race) {
+  const runners = (race.runners || [])
+    .slice()
+    .sort((a, b) => Number(a.number || 0) - Number(b.number || 0));
+
+  return `
+    <table class="runners">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Draw</th>
+          <th>Horse</th>
+          <th>Form</th>
+          <th>Jockey / Trainer</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${runners.map(renderRunner).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderResult(result) {
+  if (!result) {
+    return `<div class="no-result">Result not yet available for this race.</div>`;
+  }
+
+  const runners = (result.runners || [])
+    .slice()
+    .sort((a, b) => Number(a.position || 999) - Number(b.position || 999));
+
+  return `
+    <table class="runners">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Horse</th>
+          <th>SP</th>
+          <th>Jockey / Trainer</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${runners.map(renderResultRow).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderResultRow(r) {
+  const pos = r.position || "";
+  const isWinner = pos === "1";
+  return `
+    <tr>
+      <td class="position ${isWinner ? "winner" : ""}">${escapeHtml(pos)}</td>
+      <td class="horse">
+        <span class="name">${escapeHtml(r.horse || "")}</span>
+        <span class="breeding">${escapeHtml(r.age || "")}yo ${escapeHtml(r.sex || "")} — ${escapeHtml(r.sire || "")}</span>
+      </td>
+      <td class="sp">${escapeHtml(r.sp || "")}</td>
+      <td class="connections">
+        <span class="jockey">${escapeHtml(r.jockey || "")}</span><br/>
+        ${escapeHtml(r.trainer || "")}
+      </td>
+    </tr>
+  `;
+}
+
 function renderRunner(r) {
+  const isExpanded = expandedHorseId === r.horse_id;
   return `
     <tr>
       <td class="number">${escapeHtml(r.number || "")}</td>
       <td class="draw">${escapeHtml(r.draw || "")}</td>
       <td class="horse">
-        <span class="name">${escapeHtml(r.horse || "")}</span>
+        <span class="name" data-horse-id="${escapeHtml(r.horse_id || "")}" data-horse-name="${escapeHtml(r.horse || "")}">${escapeHtml(r.horse || "")}</span>
         <span class="breeding">${escapeHtml(r.age || "")}yo ${escapeHtml(r.sex || "")} — ${escapeHtml(r.sire || "")}</span>
       </td>
       <td class="form">${escapeHtml(r.form || "—")}</td>
@@ -395,7 +631,93 @@ function renderRunner(r) {
         ${escapeHtml(r.trainer || "")}
       </td>
     </tr>
+    ${isExpanded ? `
+      <tr class="history-row">
+        <td colspan="5">${renderHistoryPanel(r.horse_id)}</td>
+      </tr>
+    ` : ""}
   `;
+}
+
+function renderHistoryPanel(horseId) {
+  const cached = horseHistoryCache[horseId];
+
+  if (!cached || cached.loading) {
+    return `<div class="history-panel"><span class="loading">Loading last 5 runs…</span></div>`;
+  }
+
+  if (cached.error) {
+    return `<div class="history-panel"><span class="empty">Couldn't load past results.</span></div>`;
+  }
+
+  if (!cached.runs || cached.runs.length === 0) {
+    return `<div class="history-panel"><span class="empty">No past results found.</span></div>`;
+  }
+
+  return `
+    <div class="history-panel">
+      <table class="history">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Date</th>
+            <th>Course</th>
+            <th>Dist</th>
+            <th>Going</th>
+            <th>SP</th>
+            <th>Jockey</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cached.runs.map(renderHistoryRow).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderHistoryRow(run) {
+  return `
+    <tr>
+      <td class="hist-pos">${escapeHtml(run.position || "")}</td>
+      <td>${escapeHtml(run.date || "")}</td>
+      <td>${escapeHtml(run.course || "")}</td>
+      <td>${escapeHtml(run.distance_f || "")}</td>
+      <td>${escapeHtml(run.going || "")}</td>
+      <td>${escapeHtml(run.sp || "")}</td>
+      <td>${escapeHtml(run.jockey || "")}</td>
+    </tr>
+  `;
+}
+
+async function toggleHorseHistory(horseId) {
+  if (expandedHorseId === horseId) {
+    expandedHorseId = null;
+    renderActiveRace();
+    return;
+  }
+
+  expandedHorseId = horseId;
+  renderActiveRace();
+
+  if (horseHistoryCache[horseId] && !horseHistoryCache[horseId].error) {
+    return;
+  }
+
+  horseHistoryCache[horseId] = { loading: true };
+
+  try {
+    const res = await fetch(`/api/horse-results?horse_id=${encodeURIComponent(horseId)}&limit=5`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Request failed");
+    horseHistoryCache[horseId] = { loading: false, runs: data.runs || [] };
+  } catch (err) {
+    horseHistoryCache[horseId] = { loading: false, error: true };
+  }
+
+  if (expandedHorseId === horseId) {
+    renderActiveRace();
+  }
 }
 
 function escapeHtml(str) {
