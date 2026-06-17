@@ -66,6 +66,58 @@
     padding: 2rem 1.2rem 4rem;
   }
 
+  nav.race-tabs {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.4rem;
+    padding: 0 1.2rem;
+    margin: 0 auto;
+    max-width: 880px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  nav.race-tabs::-webkit-scrollbar { display: none; }
+
+  nav.race-tabs button {
+    flex: 0 0 auto;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    padding: 0.65rem 1.1rem 0.55rem;
+    cursor: pointer;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    line-height: 1.2;
+    margin-top: 0.6rem;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  nav.race-tabs button .tab-time {
+    display: block;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--green-deep);
+  }
+
+  nav.race-tabs button:hover {
+    background: var(--cream);
+  }
+
+  nav.race-tabs button.active {
+    background: var(--green-deep);
+    color: var(--cream);
+    border-color: var(--green-deep);
+    margin-top: 0;
+    padding-top: 0.85rem;
+    padding-bottom: 0.75rem;
+  }
+
+  nav.race-tabs button.active .tab-time {
+    color: var(--brass-bright);
+  }
+
   #status {
     text-align: center;
     font-family: "Helvetica Neue", Arial, sans-serif;
@@ -78,8 +130,7 @@
   .race-card {
     background: var(--paper);
     border: 1px solid var(--rule);
-    border-radius: 4px;
-    margin-bottom: 2rem;
+    border-radius: 0 4px 4px 4px;
     overflow: hidden;
     box-shadow: 0 1px 0 rgba(0,0,0,0.03);
   }
@@ -199,11 +250,14 @@
     .race-head { padding: 1rem 1rem 0.8rem; }
     .race-meta { padding: 0.5rem 1rem; }
     table.runners th:nth-child(4),
-    table.runners td:nth-child(4) { display: none; } /* hide form column on mobile */
+    table.runners td:nth-child(4) { display: none; }
+    nav.race-tabs { padding: 0 0.8rem; }
+    nav.race-tabs button { padding: 0.55rem 0.8rem 0.45rem; }
+    nav.race-tabs button .tab-label { display: none; }
   }
 </style>
 </head>
-<body >
+<body>
 
 <header class="masthead">
   <p class="eyebrow">Royal Ascot Racecourse</p>
@@ -213,12 +267,16 @@
 
 <main>
   <div id="status">Loading tomorrow's card…</div>
+  <nav class="race-tabs" id="race-tabs"></nav>
   <div id="races"></div>
 </main>
 
 <footer>Data via The Racing API · Times and runners subject to change</footer>
 
 <script>
+let allRaces = [];
+let activeIndex = 0;
+
 async function loadCard() {
   const statusEl = document.getElementById("status");
   const racesEl = document.getElementById("races");
@@ -239,17 +297,50 @@ async function loadCard() {
       return;
     }
 
-    // sort by off time
     races.sort((a, b) => (a.off_dt || a.off_time).localeCompare(b.off_dt || b.off_time));
+
+    allRaces = races;
+    activeIndex = 0;
 
     dateEl.textContent = `Ascot · ${races[0].date}`;
     statusEl.remove();
 
-    racesEl.innerHTML = races.map(renderRace).join("");
+    renderTabs();
+    renderActiveRace();
   } catch (err) {
     statusEl.textContent = "Couldn't load the racecard. " + err.message;
     statusEl.classList.add("error");
   }
+}
+
+function renderTabs() {
+  const tabsEl = document.getElementById("race-tabs");
+  tabsEl.innerHTML = allRaces
+    .map((race, i) => `
+      <button class="${i === activeIndex ? "active" : ""}" data-index="${i}">
+        <span class="tab-time">${escapeHtml(race.off_time || "")}</span>
+        <span class="tab-label">${escapeHtml(shortRaceName(race.race_name))}</span>
+      </button>
+    `)
+    .join("");
+
+  tabsEl.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeIndex = Number(btn.dataset.index);
+      renderTabs();
+      renderActiveRace();
+    });
+  });
+}
+
+function renderActiveRace() {
+  const racesEl = document.getElementById("races");
+  racesEl.innerHTML = renderRace(allRaces[activeIndex]);
+}
+
+function shortRaceName(name) {
+  if (!name) return "";
+  return name.length > 28 ? name.slice(0, 26) + "…" : name;
 }
 
 function renderRace(race) {
